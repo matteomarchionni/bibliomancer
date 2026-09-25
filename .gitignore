@@ -1,0 +1,25 @@
+# Code only. Everything below is data or personal and never goes into git
+# (the export folder on Google Drive already backs it up).
+Notes/
+cache/
+Research/
+Reports/
+Scouts/
+Projects/
+synthesis_matrix.md
+config.yaml
+kb_config.json*
+*.lnk
+
+# Python / builds
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+
+# Personal, never published
+LOCAL_NOTES.md
+local.cmd
+theme.css

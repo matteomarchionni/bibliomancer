@@ -1,0 +1,26 @@
+# Tests on Windows, macOS and Linux for every push and pull request.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Tk libraries (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y tk
+      - run: python -m pip install -e ".[test]"
+      # includes test_shared_folder_is_stamped: _shared edited without sync_shared.py fails here
+      - run: python -m pytest -q

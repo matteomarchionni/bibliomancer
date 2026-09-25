@@ -1,0 +1,7 @@
+# Runtime dependencies (same list as pyproject.toml). tkinter and sqlite3 ship with Python.
+pypdfium2>=4.30
+requests>=2.28
+numpy>=1.24
+PyYAML>=6.0
+Pillow>=10.0
+pytest>=7          # tests only

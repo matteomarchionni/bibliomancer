@@ -1,0 +1,77 @@
+# Installers for every version tag (v2.0.0 ...), attached to a GitHub release:
+#   Windows  <App>-<version>-Setup.exe      (Inno Setup, per-user, optional shortcuts)
+#   macOS    <App>-<version>-macos-arm64.dmg / -x86_64.dmg   (drag to Applications)
+#   Linux    <App>-<version>-x86_64.AppImage
+# "Run workflow" (manual) builds the same files as artifacts without a release.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+          - os: macos-14          # Apple Silicon
+          - os: macos-13          # Intel
+          - os: ubuntu-22.04      # oldest supported glibc -> widest AppImage compatibility
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Version from the tag
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          [ "$GITHUB_REF_TYPE" = "tag" ] || v="0.0.0-dev"
+          echo "APP_VERSION=$v" >> "$GITHUB_ENV"
+      - run: python -m pip install -e ".[build]"
+
+      - name: Windows installer
+        if: runner.os == 'Windows'
+        run: |
+          pyinstaller packaging/app.spec --noconfirm
+          choco install innosetup -y --no-progress
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" packaging/windows/installer.iss
+      - name: macOS disk image
+        if: runner.os == 'macOS'
+        run: sh packaging/macos/build_dmg.sh
+      - name: Linux AppImage
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y tk
+          sh packaging/linux/build_appimage.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true

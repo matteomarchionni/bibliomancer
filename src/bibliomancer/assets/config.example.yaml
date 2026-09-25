@@ -1,0 +1,40 @@
+# ==========================================================================
+# BiblioMancer - settings
+#
+# The control panel edits most of these (Options); the scheduled run reads
+# the same file. Paths may be absolute or relative to this file's folder.
+# ==========================================================================
+
+# Your PDF library. Only ever read - except duplicates (see the README).
+papers_dir: ''
+
+# A synced folder (Google Drive, OneDrive...) that receives the export for
+# other agents and a backup after every run. Empty = no export.
+export_dir: ''
+
+# Notes, database, caches, reports. LOCAL disk: SQLite on a cloud-drive mount
+# can be locked mid-run. Empty = next to the code (checkout) or
+# Documents/BiblioMancer (installed app).
+data_dir: ''
+
+# LM Studio model that reads the papers (and, if it has vision, scanned PDFs)
+model: qwen/qwen3.5-9b
+# Embedding model for search by meaning (installed in LM Studio)
+embedding_model: text-embedding-nomic-embed-text-v1.5
+# 'none' switches Qwen's reasoning off: ~15 s instead of ~80 s a paper, no
+# truncated answers (A/B on 10 papers, 2026-09-25). '' = the model's default.
+reasoning_effort: none
+# Your field(s), so the model reads papers as a specialist in them, e.g.
+# 'marine ecology and climate science'. Empty = generic.
+research_domain: ''
+
+# How much of each paper the model reads; whichever limit comes first applies.
+max_doc_tokens: 9400
+max_pages: 12
+
+# LM Studio: its command line (empty = found automatically) and server address.
+# 127.0.0.1, not localhost: on Windows localhost adds ~2 s to every request.
+lms_path: ''
+base_url: http://127.0.0.1:1234/v1
+# Papers read at the same time (1-4). >1 needs more GPU memory; benchmark first.
+parallel: 1
