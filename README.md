@@ -35,7 +35,7 @@ for a photo archive, with the same panel.
 - **Scout briefs (optional)** — PDF digests of new literature (for example from a weekly
   AI "literature scout") with your highlights and comments are matched to your papers
   and projects.
-- **Runs everywhere** — Windows, macOS and Linux; installers for all three.
+- **Runs everywhere** — Windows, macOS and Linux; installers for all three (macOS and Linux: experimental).
 
 ## Requirements
 
@@ -52,8 +52,12 @@ for a photo archive, with the same panel.
 | System | File | Notes |
 |---|---|---|
 | Windows | `BiblioMancer-<version>-Setup.exe` | per-user install, no admin rights; optional desktop / Start-menu shortcuts |
-| macOS | `BiblioMancer-<version>-macos-arm64.dmg` / `-x86_64.dmg` | drag to Applications; unsigned: first launch with right-click → Open |
-| Linux | `BiblioMancer-<version>-x86_64.AppImage` | `chmod +x` and run; the first-run window offers a menu entry |
+| macOS *(experimental)* | `BiblioMancer-<version>-macos-arm64.dmg` / `-x86_64.dmg` | drag to Applications; unsigned: first launch with right-click → Open |
+| Linux *(experimental)* | `BiblioMancer-<version>-x86_64.AppImage` | `chmod +x` and run; the first-run window offers a menu entry |
+
+> **macOS and Linux builds are experimental**: they are built automatically but have
+> not been tested on real machines yet. Please report problems in the issues; running
+> from Python (below) works everywhere.
 
 **With Python** (any system):
 

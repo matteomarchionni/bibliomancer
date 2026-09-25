@@ -20,9 +20,9 @@ Pick one (details in the [README](../../README.md#install)):
 
 - **Windows**: run `BiblioMancer-<version>-Setup.exe`. No administrator rights needed.
   Tick *Create a desktop icon* if you want one; the Start-menu entry is on by default.
-- **macOS**: open the `.dmg` and drag BiblioMancer to Applications. The first time,
+- **macOS** *(experimental)*: open the `.dmg` and drag BiblioMancer to Applications. The first time,
   right-click the app → Open (the build is not signed by Apple).
-- **Linux**: make the AppImage executable (`chmod +x`) and run it.
+- **Linux** *(experimental)*: make the AppImage executable (`chmod +x`) and run it.
 - **Python**: `pipx install git+https://github.com/matteomarchionni/bibliomancer`, then
   `bibliomancer`.
 

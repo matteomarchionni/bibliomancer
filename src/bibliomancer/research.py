@@ -28,7 +28,6 @@ import datetime as dt
 import json
 import os
 import re
-import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))

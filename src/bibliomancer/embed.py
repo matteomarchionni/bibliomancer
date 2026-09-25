@@ -26,7 +26,6 @@ import argparse
 import hashlib
 import json
 import os
-import sys
 
 from . import core as kb
 

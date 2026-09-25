@@ -139,7 +139,7 @@ def cmd_import(args) -> int:
                     bad += 1
                     continue
 
-                note = kb.commit_paper(
+                kb.commit_paper(
                     conn, record, digest, rel,
                     raw.get("filename") or os.path.basename(rel),
                     source=args.source,

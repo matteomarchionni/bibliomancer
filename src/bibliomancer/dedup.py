@@ -25,7 +25,6 @@ import argparse
 import difflib
 import os
 import re
-import sys
 
 from . import core as kb
 

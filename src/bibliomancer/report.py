@@ -75,7 +75,7 @@ def main() -> int:
           f"- Pending (read at the next update): **{pending}**",
           f"- Given up after {kb.MAX_ATTEMPTS} attempts: **{len(given_up)}**",
           f"- Model now: `{kb.MODEL_NAME}` (reasoning: {kb.REASONING_EFFORT or 'model default'})",
-          f"- Measured reading speed: " + (f"median {speed:.0f} s per paper over the last "
+          "- Measured reading speed: " + (f"median {speed:.0f} s per paper over the last "
                                            f"{n_speed} papers" if speed else "no log data yet"),
           ""]
     md += table("Years", Counter(dict(sorted(years.items(), reverse=True))), top=60)
@@ -89,7 +89,7 @@ def main() -> int:
     by_key = Counter(r[0] or "before 2026-09-25 (not recorded)" for r in conn.execute(
         "SELECT s.setup_key FROM processed_papers p LEFT JOIN paper_setup s USING (file_hash)"))
     conn.close()
-    md += [f"## Setup that wrote the notes", "",
+    md += ["## Setup that wrote the notes", "",
            f"Current setup `{key}`: model `{setup['model']}`, reasoning {setup['reasoning_effort'] or 'default'}, "
            f"prompt {setup['prompt_sha8']}, {setup['max_doc_tokens']:,} tokens / {setup['max_pages']} pages "
            "per paper. Notes written with another setup are only re-read by Rebuild.", "",

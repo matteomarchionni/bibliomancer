@@ -10,7 +10,6 @@ deleting rows, or if the file is ever damaged by a sync conflict.
 from __future__ import annotations
 
 import os
-import sys
 
 from . import core as kb
 

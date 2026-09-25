@@ -1,0 +1,46 @@
+name: Bug report
+description: Something does not work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please remove personal paths or paper titles you do not want to share.
+        Security problems: do not open an issue, see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Activity log or error
+      description: The relevant lines from the panel's activity log, or from Logs → run_scheduled.log.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: BiblioMancer version
+      placeholder: e.g. 2.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options: [Windows installer, macOS dmg, Linux AppImage, pipx / pip, source checkout]
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: e.g. Windows 11, macOS 15, Ubuntu 24.04
+  - type: input
+    id: model
+    attributes:
+      label: LM Studio version and model
+      placeholder: e.g. LM Studio 0.3.30, qwen/qwen3.5-9b
