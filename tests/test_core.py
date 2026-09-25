@@ -66,13 +66,14 @@ def test_reasoning_off_by_default():
 
 
 def test_kb_config_json_migrates(tmp_path, monkeypatch):
+    pdfs = str(tmp_path / "pdfs")                                 # absolute on every OS
     (tmp_path / "kb_config.json").write_text(json.dumps(
-        {"papers_dir": "C:\\pdfs", "max_pages": 40, "ignored": 1}), encoding="utf-8")
+        {"papers_dir": pdfs, "max_pages": 40, "ignored": 1}), encoding="utf-8")
     monkeypatch.setattr(config, "CONFIG_DIR", str(tmp_path))
     monkeypatch.setattr(config, "CONFIG_PATH", str(tmp_path / "config.yaml"))
     monkeypatch.setattr(config, "PORTABLE", True)
     cfg = config.load()
-    assert cfg["papers_dir"] == "C:\\pdfs" and cfg["max_pages"] == 40
+    assert cfg["papers_dir"] == pdfs and cfg["max_pages"] == 40
     assert cfg["data_dir"] == config.APP_HOME                 # portable: data next to the code
     assert (tmp_path / "kb_config.json.migrated").exists()
     text = (tmp_path / "config.yaml").read_text(encoding="utf-8")
