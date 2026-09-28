@@ -223,6 +223,10 @@ class App(DashboardApp):
     def lm_base_url(self):
         return self.kb.LM_BASE
 
+    def embedding_target(self):
+        from ._shared.lmstudio import find_lms
+        return find_lms(self.kb.LMS_PATH), self.kb.EMBED_MODEL
+
     def scheduled_kind(self):
         return "update"
 
@@ -325,6 +329,7 @@ class App(DashboardApp):
 
     def load_catalog(self):
         self.browse_note.config(text="Loading the catalogue…", fg=T.MUTED)
+        self.ensure_semantic()              # search by meaning needs LM Studio running
 
         def work():
             rows, err, idx = [], "", None
@@ -379,7 +384,7 @@ class App(DashboardApp):
             return ({h: float(sc[i]) for i, h in enumerate(self.sidx.keys)},
                     {self.sidx.keys[i] for i in np.nonzero(hit)[0]}), ""
         except Exception as exc:
-            return None, "LM Studio is off" if "Connection" in type(exc).__name__ else type(exc).__name__
+            return None, self.semantic_retry(q, exc)
 
     def apply_filter(self):
         q = self.query.get().strip()
@@ -521,6 +526,7 @@ class App(DashboardApp):
         def work():
             try:
                 from ._shared.embed import rank_folders
+                self.embed_mod.wake()
                 qv = idx.query_vec(q)
                 res = rank_folders(idx.keys, idx.vecs, idx.scores(q, qv), qv, paths_by, level,
                                    "(library root)")

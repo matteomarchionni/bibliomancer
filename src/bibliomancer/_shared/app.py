@@ -596,6 +596,50 @@ class DashboardApp:
     def lm_base_url(self) -> str:
         return "http://127.0.0.1:1234/v1"
 
+    def embedding_target(self) -> tuple[str, str]:
+        """(lms path, embedding model) for search by meaning; ('', '') = not used."""
+        return "", ""
+
+    def ensure_semantic(self, then=None) -> None:
+        """Search by meaning needs LM Studio: start its server and load the
+        embedding model in the background (a fresh start has neither), then call
+        then(ok, reason) on the Tk thread. Concurrent calls share one attempt."""
+        waiting = getattr(self, "_sem_wait", None)
+        if waiting is not None:
+            if then:
+                waiting.append(then)
+            return
+        self._sem_wait = [then] if then else []
+        lms, model = self.embedding_target()
+
+        def work():
+            from .lmstudio import ensure_embedding
+            try:
+                ok, why = ensure_embedding(lms, self.lm_base_url(), model) if model else (False, "")
+            except Exception as exc:
+                ok, why = False, f"{type(exc).__name__}: {exc}"
+
+            def done():
+                calls, self._sem_wait = self._sem_wait, None
+                if ok:
+                    self.pill.config(text="●  LM Studio running", fg=T.GREEN)
+                elif why:
+                    self.log(f"search by meaning unavailable: {why}\n", "warn")
+                for f in calls:
+                    f(ok, why)
+            self.q.put(done)
+        threading.Thread(target=work, daemon=True).start()
+
+    def semantic_retry(self, query: str, exc: Exception) -> str:
+        """A query could not be embedded (LM Studio off, or its embedding model
+        still loading): make sure LM Studio is ready, then run apply_filter() again.
+        Once per query, so a persistent error cannot loop. Returns the reason to show."""
+        if getattr(self, "_sem_retry", None) == query and getattr(self, "_sem_wait", None) is None:
+            return "LM Studio is off" if "Connection" in type(exc).__name__ else type(exc).__name__
+        self._sem_retry = query
+        self.ensure_semantic(lambda ok, _why: ok and self.apply_filter())
+        return "starting LM Studio - searching by meaning in a moment"
+
     def _show_status(self, o):
         self.show_counts(o)
         s = o.get("sched", "none")

@@ -112,6 +112,43 @@ def start_server(lms: str, out: Callable[[str], None] = print) -> None:
         run_lms(lms, ["server", "start"], "start LM Studio server", out)
 
 
+def ensure_embedding(lms: str, base_url: str, model: str, ttl_s: int = 3600,
+                     wait_s: float = 45) -> tuple[bool, str]:
+    """Make search by meaning possible: start the server if it is down (a fresh
+    start, or LM Studio closed) and load the embedding model if it is not loaded.
+    Does not rely on just-in-time loading, which can be switched off in LM Studio.
+    Loading an embedding model adds an instance and never touches a loaded chat
+    model. Blocks up to ~wait_s: call it from a worker thread. (ok, reason)."""
+    import time
+    up = server_up(base_url, timeout=2)[0]
+    if not up:
+        if not lms or not os.path.exists(lms):
+            return False, "LM Studio is not running (and its lms command was not found)"
+        try:
+            run_quiet([lms, "server", "start"], timeout=wait_s)
+        except Exception:
+            pass                            # the wait below decides
+        end = time.monotonic() + wait_s
+        while not up and time.monotonic() < end:
+            time.sleep(1)
+            up = server_up(base_url, timeout=2)[0]
+        if not up:
+            return False, "LM Studio did not start"
+    if not lms or not os.path.exists(lms):
+        return True, ""                     # server up; rely on just-in-time loading
+    want = model.strip().lower()
+    if any(want in ((m.get("identifier") or "").lower(), (m.get("modelKey") or "").lower())
+           for m in loaded_models(lms)):
+        return True, ""
+    try:
+        rc = run_quiet([lms, "load", model, "--ttl", str(ttl_s), "-y"], timeout=180).returncode
+    except Exception:
+        rc = -1
+    if rc != 0:
+        return False, f"could not load the embedding model {model} - is it downloaded in LM Studio?"
+    return True, ""
+
+
 def setup(lms: str, model: str, context_per_request: int, parallel: int = 1, ttl_s: int = 3600,
           need_vision: bool = False, out: Callable[[str], None] = print) -> None:
     """Start the server and make sure `model` is loaded with enough context.

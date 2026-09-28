@@ -128,3 +128,36 @@ def test_paths_helpers():
     assert os.path.normcase(home) == os.path.normcase(ROOT)
     env = paths.child_env(os.path.join(ROOT, "src", PKG, "__init__.py"))
     assert env["PYTHONPATH"].split(os.pathsep)[0] == os.path.join(ROOT, "src")
+
+
+def test_ensure_embedding_starts_server_and_loads_model(tmp_path, monkeypatch):
+    """A fresh start (server down, nothing loaded) must end with the embedding model loaded."""
+    lm = importlib.import_module(f"{PKG}._shared.lmstudio")
+    lms = tmp_path / "lms.exe"
+    lms.write_text("")
+    calls, state = [], {"up": False, "loaded": []}
+
+    def fake_run(argv, timeout=None, console=False):
+        calls.append(argv[1:3])
+        if argv[1:3] == ["server", "start"]:
+            state["up"] = True
+        if argv[1] == "load":
+            state["loaded"].append({"identifier": argv[2], "type": "embedding"})
+
+        class P:
+            returncode = 0
+        return P()
+
+    monkeypatch.setattr(lm, "run_quiet", fake_run)
+    monkeypatch.setattr(lm, "server_up", lambda base, timeout=4: (state["up"], []))
+    monkeypatch.setattr(lm, "loaded_models", lambda lms: state["loaded"])
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    model = "text-embedding-nomic-embed-text-v1.5"
+
+    assert lm.ensure_embedding("", "http://x", model) == (
+        False, "LM Studio is not running (and its lms command was not found)")
+    assert lm.ensure_embedding(str(lms), "http://x", model) == (True, "")
+    assert calls == [["server", "start"], ["load", model]]
+    calls.clear()
+    assert lm.ensure_embedding(str(lms), "http://x", model) == (True, "")   # ready: nothing to do
+    assert calls == []

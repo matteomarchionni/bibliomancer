@@ -52,6 +52,13 @@ def paper_text(row) -> str:
     return "\n".join(p for p in parts if p.strip())[:MAX_CHARS]
 
 
+def wake() -> tuple[bool, str]:
+    """Start LM Studio and load the embedding model if needed (blocks up to ~45 s):
+    every query is embedded by LM Studio, so a fresh start cannot search by meaning."""
+    from ._shared.lmstudio import ensure_embedding, find_lms
+    return ensure_embedding(find_lms(kb.LMS_PATH), kb.LM_BASE, kb.EMBED_MODEL)
+
+
 def embed(texts: list[str], prefix: str) -> list[list[float]]:
     import requests
     r = requests.post(f"{kb.LM_BASE}/embeddings",
@@ -101,6 +108,8 @@ def update(rebuild: bool = False, log=print) -> int:
     log(f"Embeddings: {len(keep_idx)} unchanged, {len(todo)} to embed, "
         f"{max(dropped, 0)} dropped")
 
+    if todo:
+        wake()
     for i in range(0, len(todo), BATCH):
         chunk = todo[i:i + BATCH]
         vecs = embed([t for _, _, t in chunk], "search_document: ")
@@ -166,6 +175,7 @@ def search(query: str, k: int = 10):
     if vecs is None or not idx:
         return None
     try:
+        wake()
         q = np.asarray(embed([query], "search_query: ")[0], dtype=np.float32)
     except Exception:
         return None

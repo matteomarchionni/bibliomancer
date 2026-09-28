@@ -21,6 +21,11 @@ findings, takeaway) with the `nomic-embed-text` model; a query is embedded the s
 compared, with a small bonus when a query word literally appears in the title, fields or
 keywords. The index is updated after every run.
 
+Every query is embedded by LM Studio, so search by meaning needs it running. You do not
+have to start it: opening Browse (or searching in Folders) starts LM Studio's server and
+loads the small embedding model in the background — a few seconds on a fresh start, while
+the first search shows exact-word matches and then switches to meaning by itself.
+
 ## Folders
 
 If your library is organised in folders, **Folders** tells you which ones are about a topic.
