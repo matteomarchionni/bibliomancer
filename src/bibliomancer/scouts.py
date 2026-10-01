@@ -2,8 +2,28 @@
 scouts.py - Parse literature-scout briefs into a machine-readable index,
 including your own PDF annotations.
 
-A scout brief is a PDF digest of new papers (e.g. written weekly by an AI
-agent) saved into <data>/Scouts/. Two layouts are understood:
+A scout brief is a digest of new papers (e.g. written weekly by an AI agent)
+saved into <data>/Scouts/ as a PDF or as the .html page itself.
+
+CARD LAYOUT (an HTML report, or that page saved as PDF from the browser):
+
+    <article class="entry">
+      <p class="entry-id"><span class="risk ...">High overlap</span><span>Venue</span>
+         <span>1 Mar 2026</span><span class="pill ...">flag</span>
+         <span class="pill proj">Project</span></p>
+      <h3>Title</h3>
+      <p class="byline">Authors · doi <a href="https://doi.org/10.x/y">10.x/y</a></p>
+      <p class="body">Summary</p>
+      <p class="verdict"><b>What this means for Project</b>Assessment</p>
+    </article>
+
+  The .html is read exactly. In the PDF the same card is a run of text lines
+  (a line starting with a risk label, title, byline, summary, verdict); project
+  names in the header are recognised from projects.json, the section headings
+  ("Project  5 ITEMS") and the "What this means for ..." labels. arXiv-only
+  entries get the arXiv DOI (10.48550/arxiv.<id>).
+
+PROSE LAYOUT (a brief printed from an e-mail), two forms:
 
   Priority alerts    N. Title (may wrap)
                      Authors - Venue, date - 10.xxxx/yyyy
@@ -14,7 +34,11 @@ agent) saved into <data>/Scouts/. Two layouts are understood:
 
 Both put the DOI at the end of a byline, with the item's analysis after it, so
 this anchors on DOIs: an item spans from the start of its title block to the
-next DOI's title block. You highlight items and attach comments (in any
+next DOI's title block.
+
+A PDF made by a PDF *printer* (e.g. "Microsoft Print to PDF") can have no text
+at all: it cannot be read - save the page from the browser with "Save as PDF",
+or put the .html in Scouts. In a PDF you highlight items and attach comments (in any
 language); those are your own verdict and outrank the scout's prose, so they
 are captured verbatim and mapped back onto items by locating the highlighted
 text. All position arithmetic happens in whitespace-normalised space, because
@@ -61,7 +85,7 @@ MENTION_RE = re.compile(r"\b(" + _ALT + r")\b", re.IGNORECASE)
 # E-mail print furniture that pollutes the extracted text (a brief printed from
 # Gmail: URLs, date stamps, "Posta di <org>", page counters, sender/recipient lines).
 JUNK_RE = re.compile(
-    r"^(https?://|\d{2}/\d{2}/\d{2},|Posta di \w|\d+/\d+$|"
+    r"^(https?://|file:///|\d{2}/\d{2}/\d{2},|Posta di \w|\d+/\d+$|"
     r"[^<\n]{2,60} <[^@\s>]+@[^>\s]+>|(A|To|Da|From): \S)", re.I)
 
 VERDICT_RULES = [
@@ -119,12 +143,210 @@ def _doi_usable(d: str) -> bool:
     return len(suffix) >= 5 and not d.endswith(("-", ".", "_"))
 
 
-def parse_pdf(path: str) -> list[dict]:
+class NoText(Exception):
+    """The PDF has no text layer (made by a PDF printer, or scanned)."""
+
+
+# ------------------------------------------------------------ card layout ---
+RISK_LABELS = ("scoop risk", "high overlap", "potential overlap", "cite / benchmark",
+               "of interest")
+_RISK = "|".join(re.escape(r) for r in RISK_LABELS)
+CARD_HEAD_RE = re.compile(rf"^({_RISK})\s+(\S.*)$", re.I)
+SECTION_RE = re.compile(r"^(.+?)\s+\d+\s+(?:ITEMS?|PAPERS?)$")       # "Project 5 ITEMS"
+VERDICT_RE = re.compile(r"^(?:what this means for\s+(.+)|relevance)$", re.I)
+DATE_RE = re.compile(r"\b\d{1,2} [A-Z][a-z]{2} \d{4}\b")
+ARXIV_RE = re.compile(r"\barXiv:\s*(\d{4}\.\d{4,5})", re.I)
+
+
+def _canon(name: str) -> str:
+    """A project name as projects.json spells it; otherwise as the brief does."""
+    name = norm(name)
+    return next((c for c in PROJECT_NAMES if c.lower() == name.lower()), name)
+
+
+def _key(text: str) -> tuple[str | None, str]:
+    """(doi usable as a match key or None, raw key) from a byline: a DOI, or an
+    arXiv id turned into its DOI; neither -> (None, '')."""
+    m = DOI_RE.search(text)
+    if m:
+        d = m.group(0).rstrip(".,;)").lower()
+        return (d if _doi_usable(d) else None), d
+    m = ARXIV_RE.search(text)
+    if m:
+        d = f"10.48550/arxiv.{m.group(1)}"
+        return d, d
+    return None, ""
+
+
+def _card_item(title: str, byline: str, summary: str, label_project: str, verdict: str,
+               projects: list[str], risk: str, venue: str, date: str, flags: list[str]) -> dict:
+    doi, raw = _key(byline)
+    title, verdict, summary = norm(title), norm(verdict), norm(summary)
+    projects = [_canon(p) for p in projects]
+    assessments = {}
+    if label_project:
+        lp = _canon(label_project)
+        if lp not in projects:
+            projects.append(lp)
+        assessments[lp] = verdict[:1400]
+    return {
+        "doi": doi, "doi_raw": raw or "title:" + re.sub(r"[^a-z0-9]+", " ", title.lower()).strip(),
+        "title": title[:260], "projects": list(dict.fromkeys(projects)),
+        "assessments": assessments, "analysis": verdict[:1400],
+        "summary": summary[:1400], "risk": norm(risk).lower(), "venue": norm(venue),
+        "date": date, "flags": [norm(f) for f in flags if norm(f)],
+        "_text": norm(" ".join([title, byline, summary, verdict])),
+        "_titleblock": norm(title + " " + byline)[-320:],
+    }
+
+
+def parse_html(path: str) -> list[dict]:
+    """Cards of an HTML brief (<article class="entry">), read exactly."""
+    from html.parser import HTMLParser
+
+    class Cards(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.cards, self.cur, self.slot, self.sub, self.buf = [], None, None, None, []
+
+        def handle_starttag(self, tag, attrs):
+            a = dict(attrs)
+            cls = a.get("class") or ""
+            if tag == "article" and "entry" in cls.split():
+                self.cur = {"chips": [], "title": "", "byline": "", "body": "", "label": "",
+                            "verdict": ""}
+            if self.cur is None:
+                return
+            if tag == "details":
+                self.slot = "skip"
+            elif self.slot == "skip":
+                return
+            elif tag == "h3":
+                self.slot = "title"
+            elif tag == "p":
+                c = cls.split()
+                self.slot = next((s for s in ("entry-id", "byline", "body", "verdict") if s in c), None)
+            elif tag == "span" and self.slot == "entry-id":
+                self.sub, self.buf = cls, []
+            elif tag == "b" and self.slot == "verdict":
+                self.sub = "label"
+            elif tag == "a" and self.slot == "byline" and a.get("href"):
+                self.cur["byline"] += " " + a["href"].replace("https://doi.org/", "") + " "
+
+        def handle_endtag(self, tag):
+            if self.cur is None:
+                return
+            if tag == "details":
+                self.slot = None
+            elif tag == "span" and self.slot == "entry-id" and self.sub is not None:
+                self.cur["chips"].append((self.sub, "".join(self.buf)))
+                self.sub = None
+            elif tag == "b":
+                self.sub = None
+            elif tag in ("p", "h3") and self.slot != "skip":
+                self.slot = None
+            elif tag == "article":
+                self.cards.append(self.cur)
+                self.cur = self.slot = None
+
+        def handle_data(self, data):
+            if self.cur is None or self.slot in (None, "skip"):
+                return
+            if self.slot == "entry-id":
+                if self.sub is not None:
+                    self.buf.append(data)
+            elif self.slot == "verdict":
+                self.cur["label" if self.sub == "label" else "verdict"] += data
+            else:
+                self.cur[self.slot] += data
+
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        p = Cards()
+        p.feed(fh.read())
+    items = []
+    for c in p.cards:
+        chips = [(cls.split(), norm(t)) for cls, t in c["chips"] if norm(t)]
+        plain = [t for cls, t in chips if not cls]
+        date = next((t for t in plain if DATE_RE.search(t)), "")
+        m = VERDICT_RE.match(norm(c["label"]))
+        items.append(_card_item(
+            c["title"], c["byline"], c["body"], (m.group(1) or "") if m else "", c["verdict"],
+            projects=[t for cls, t in chips if "proj" in cls],
+            risk=next((t for cls, t in chips if "risk" in cls), ""),
+            venue=next((t for t in plain if t != date), ""), date=date,
+            flags=[t for cls, t in chips if "pill" in cls and "proj" not in cls]))
+    return items
+
+
+def _cards_from_text(full: str) -> list[dict] | None:
+    """Cards of a card-layout brief saved as PDF, from its text lines; None when
+    the text is not in card layout (fewer than two card headers)."""
+    lines = [ln.strip() for ln in full.splitlines() if ln.strip()]
+    heads = [i for i, ln in enumerate(lines) if CARD_HEAD_RE.match(ln)]
+    if len(heads) < 2:
+        return None
+    squash = lambda s: re.sub(r"\s+", "", s.lower())      # noqa: E731  (PDF text drops spaces)
+    # Names a header chip can be: projects.json, section headings, verdict labels.
+    names = {squash(n): n for n in PROJECT_NAMES}
+    for ln in lines:                    # section headings keep the name's own spelling
+        m = SECTION_RE.match(ln)
+        if m and any(squash(m.group(1)) in squash(lines[h]) for h in heads):
+            names.setdefault(squash(m.group(1)), norm(m.group(1)))
+    for ln in lines:                    # verdict labels are upper-cased by the page
+        m = VERDICT_RE.match(ln)
+        if m and m.group(1):
+            names.setdefault(squash(m.group(1)), norm(m.group(1)).capitalize())
+
+    items = []
+    for n, h in enumerate(heads):
+        end = heads[n + 1] if n + 1 < len(heads) else len(lines)
+        card = lines[h:end]
+        cut = next((k for k, ln in enumerate(card) if k and (SECTION_RE.match(ln) or ln == "ARCHIVE")),
+                   len(card))
+        card = card[:cut]
+        m = CARD_HEAD_RE.match(card[0])
+        risk, chips = m.group(1), m.group(2)
+        k = 1
+        while k < len(card) and card[k].isupper() and not VERDICT_RE.match(card[k]):
+            chips += " " + card[k]                        # a header that wrapped
+            k += 1
+        by = next((j for j in range(k, min(k + 8, len(card)))
+                   if re.search(r"\bdoi\s+10\.|^10\.\d{4,9}/|arXiv:\s*\d", card[j], re.I)), None)
+        v = next((j for j in range(k, len(card)) if VERDICT_RE.match(card[j])), len(card))
+        title_end = by if by is not None else min(k + 2, v)
+        body = [ln for ln in card[(by + 1 if by is not None else title_end):v] if ln.upper() != "ABSTRACT"]
+        label = VERDICT_RE.match(card[v]).group(1) if v < len(card) else None
+        label = names.get(squash(label), label) if label else None
+        dm = DATE_RE.search(chips)
+        sq = squash(chips[dm.end():] if dm else chips)
+        items.append(_card_item(
+            " ".join(card[k:title_end]), card[by] if by is not None else "", " ".join(body),
+            label or "", " ".join(card[v + 1:]),
+            projects=[name for key, name in sorted(names.items(), key=lambda kv: sq.find(kv[0]))
+                      if key in sq],
+            risk=risk, venue=chips[:dm.start()] if dm else "", date=dm.group(0) if dm else "",
+            flags=[]))
+    return items
+
+
+def parse_pdf(path: str) -> tuple[list[dict], int, int]:
     from .pdf import open_pdf
 
     doc = open_pdf(path)
     pages = [clean_text(doc.text(i)) for i in range(doc.page_count)]
     full = "\n".join(pages)
+    if not full.strip():
+        doc.close()
+        raise NoText(path)
+    nfull = norm(full)
+    items = _cards_from_text(full)
+    if items is None:
+        items = _prose_items(full)
+    return _annotate(doc, nfull, items, path)
+
+
+def _prose_items(full: str) -> list[dict]:
+    """Items of a prose-layout brief (see the module docstring), anchored on DOIs."""
     nfull = norm(full)
     # Rejoin DOIs broken across a PDF line wrap, e.g.
     #     10.1038/s41467-026-\n76829-1
@@ -212,8 +434,11 @@ def parse_pdf(path: str) -> list[dict]:
             "_titleblock": before[-320:],
             "_span": span,
         })
+    return items
 
-    # ---- annotations ------------------------------------------------------
+
+def _annotate(doc, nfull: str, items: list[dict], path: str) -> tuple[list[dict], int, int]:
+    """Attach your highlights and comments to the items; (items, placed, unplaced)."""
     annots = []
     for pi in range(doc.page_count):
         try:
@@ -241,7 +466,7 @@ def parse_pdf(path: str) -> list[dict]:
             if target or len(probe) < 12:
                 continue
             for it in items:
-                if probe in it["analysis"]:
+                if probe in it["analysis"] or probe in it.get("_text", ""):
                     target, how = it, "analysis"
                     break
             if not target:
@@ -275,19 +500,57 @@ def parse_pdf(path: str) -> list[dict]:
         collapsed[key] = it
     items = list(collapsed.values())
 
+    return _finish(items, path), placed, unplaced
+
+
+def _finish(items: list[dict], path: str) -> list[dict]:
     for it in items:
-        it.pop("_span", None)
-        it.pop("_titleblock", None)
+        for k in ("_span", "_titleblock", "_text"):
+            it.pop(k, None)
         c = " | ".join(x["comment"] for x in it.get("annotations", []) if x["comment"])
         it["user_comment"] = c
         it["user_verdict"] = classify_verdict(c)
         it["source_brief"] = os.path.basename(path)
-    return items, placed, unplaced
+    return items
+
+
+def refresh_notes(dry_run: bool = False) -> list[str]:
+    """Notes of papers ALREADY in the library whose scout section is missing or
+    out of date (a brief that arrived after the paper, a new comment): re-render
+    them from the catalogue - no model call; hand-edited notes are not overwritten
+    (see core.write_note). Returns the note names concerned."""
+    from . import projects
+    projects._cache.clear()                       # the index was just rewritten
+    if not os.path.exists(kb.DB_PATH):
+        return []
+    conn = kb.connect()
+    changed = []
+    try:
+        for r in conn.execute("SELECT file_hash, doi, title, note_filename FROM processed_papers"
+                              ).fetchall():
+            section = projects.section_for(r["doi"], r["title"])
+            if not section or not r["note_filename"]:
+                continue
+            try:
+                with open(os.path.join(kb.NOTES_DIR, r["note_filename"]), encoding="utf-8") as fh:
+                    note = fh.read()
+            except OSError:
+                continue
+            if norm(section) in norm(note):
+                continue
+            changed.append(r["note_filename"])
+            if not dry_run:
+                kb.rerender_note(conn, r["file_hash"])
+    finally:
+        conn.close()
+    return changed
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Index the literature-scout briefs.")
     ap.add_argument("--show", action="store_true")
+    ap.add_argument("--no-notes", action="store_true",
+                    help="only rebuild the index; do not refresh the notes of library papers")
     args = ap.parse_args()
 
     os.makedirs(PROJECTS_DIR, exist_ok=True)
@@ -295,20 +558,43 @@ def main() -> int:
         print(f"No Scouts folder at {SCOUTS_DIR}")
         return 1
 
-    all_items = []
+    all_items, unreadable = [], 0
     for f in sorted(os.listdir(SCOUTS_DIR)):
-        if not f.lower().endswith(".pdf"):
+        path, ext = os.path.join(SCOUTS_DIR, f), os.path.splitext(f)[1].lower()
+        try:
+            if ext == ".pdf":
+                got, placed, unplaced = parse_pdf(path)
+                print(f"  {f}: {len(got)} item(s); annotations placed {placed}, unplaced {unplaced}")
+            elif ext in (".html", ".htm"):
+                got = _finish(parse_html(path), path)
+                print(f"  {f}: {len(got)} item(s)")
+            else:
+                continue
+        except NoText:
+            unreadable += 1
+            print(f"  {f}: WARNING no text in this PDF - nothing indexed. It was made by a PDF "
+                  f"printer (e.g. Microsoft Print to PDF): save the brief from the browser with "
+                  f"'Save as PDF' instead, or put its .html file in the Scouts folder.")
             continue
-        got, placed, unplaced = parse_pdf(os.path.join(SCOUTS_DIR, f))
-        print(f"  {f}: {len(got)} item(s); annotations placed {placed}, unplaced {unplaced}")
+        if not got:
+            unreadable += 1
+            print(f"  {f}: WARNING no items recognised - is this a scout brief in a known layout?")
         all_items += got
 
     by_doi = {}
     for it in all_items:
         key = it["doi"] or f"{it['source_brief']}::{it['doi_raw']}"
         prev = by_doi.get(key)
-        if prev and prev.get("user_comment") and not it.get("user_comment"):
-            it["user_comment"], it["user_verdict"] = prev["user_comment"], prev["user_verdict"]
+        if prev:
+            if prev.get("user_comment") and not it.get("user_comment"):     # keep your verdict
+                for k in ("user_comment", "user_verdict", "annotations"):
+                    if k in prev:
+                        it[k] = prev[k]
+            if prev.get("risk") and not it.get("risk"):       # the card version is the richer one
+                for k in ("user_comment", "user_verdict", "annotations"):
+                    if k in it:
+                        prev[k] = it[k]
+                it = prev
         by_doi[key] = it
 
     with open(INDEX_PATH, "w", encoding="utf-8") as fh:
@@ -316,6 +602,15 @@ def main() -> int:
                   fh, ensure_ascii=False, indent=2)
     print(f"\nWrote {INDEX_PATH}: {len(by_doi)} unique DOI(s), "
           f"{sum(1 for i in by_doi.values() if i['user_comment'])} carrying your comments")
+    if unreadable:
+        print(f"WARNING {unreadable} brief(s) could not be read - see above")
+    if not args.no_notes:
+        changed = refresh_notes()
+        if changed:
+            print(f"Updated the scout section in {len(changed)} note(s) of papers already "
+                  f"in the library:")
+            for name in changed:
+                print(f"  {name}")
 
     if args.show:
         for it in by_doi.values():

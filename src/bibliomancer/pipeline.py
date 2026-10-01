@@ -5,7 +5,7 @@ The panel, the scheduled run and the command line all call this, so every
 path runs exactly the same sequence:
 
   update   1. start LM Studio and load the model at the right context length
-           2. refresh the scout index from Scouts/*.pdf
+           2. refresh the scout index from Scouts/ (.pdf, .html)
               then drop incoming PDFs that duplicate a catalogued paper
            3. ingest new PDFs (vision OCR for scans, retry on truncation)
            4. remove duplicate papers (same DOI, same content)

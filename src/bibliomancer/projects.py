@@ -119,20 +119,30 @@ def render_section(item: dict) -> str:
         L.append("_No manual evaluation recorded for this item in the brief._")
         L.append("")
 
+    if item.get("risk"):                             # card-layout briefs rate each item
+        rating = item["risk"].capitalize() + "".join(f" · {f}" for f in item.get("flags") or [])
+        where = ", ".join(x for x in (item.get("venue"), item.get("date")) if x)
+        L.append(f"**Scout rating:** {rating}" + (f" _({where})_" if where else ""))
+        L.append("")
+
+    assessed = False
     if item.get("projects"):
         L.append(f"**Projects touched:** {', '.join(item['projects'])}")
         L.append("")
         for p in item["projects"]:
             meta = by_name.get(p.lower(), {})
             assessment = (item.get("assessments") or {}).get(p)
+            if not (assessment or meta.get("one_line")):
+                continue                             # a bare tag: already in the list above
             L.append(f"### {p}")
             if meta.get("one_line"):
                 L.append(f"_{meta['one_line']}_")
                 L.append("")
             if assessment:
+                assessed = True
                 L.append(f"**Scout assessment.** {assessment}")
                 L.append("")
-    elif item.get("analysis"):
+    if not assessed and item.get("analysis"):
         L.append(f"**Scout note.** {item['analysis']}")
         L.append("")
 

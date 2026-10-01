@@ -10,6 +10,7 @@
 | Scanned PDFs are skipped | The model has no vision. Pick a vision model, or untick *Vision OCR*. |
 | The weekly run did not happen | The PC was off: it runs as soon as the PC is back on. The log is `<data>/cache/logs/run_scheduled.log`. Re-choose *Weekly* after moving the program. |
 | "EXPORT SKIPPED: … holds the export of another knowledge base" | The export folder belongs to a different BiblioMancer data folder (a second copy or a test). Choose another folder, or `bibliomancer export --force`. |
+| A scout brief was not picked up | *Refresh scouts* lists every brief with its item count. "No text in this PDF": it was made with a PDF printer (e.g. Microsoft Print to PDF) — save it from the browser with *Save as PDF*, or put the `.html` in `Scouts`. "No items recognised": the layout is not one of the two in [tutorial 8](tutorials/08-scout-briefs-and-projects.md). |
 | A note I edited was not updated | On purpose: hand-edited notes are never overwritten. The new version is next to it as `<note>.generated.md`. |
 | macOS: "cannot be opened because the developer cannot be verified" | The build is unsigned: right-click the app → Open, once. |
 | Windows: SmartScreen "unknown publisher" | The installer is unsigned: More info → Run anyway. |
