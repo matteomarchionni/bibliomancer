@@ -18,7 +18,7 @@ jobs:
         include:
           - os: windows-latest
           - os: macos-14          # Apple Silicon
-          - os: macos-13          # Intel
+          - os: macos-15-intel    # Intel (macos-13 was retired)
           - os: ubuntu-22.04      # oldest supported glibc -> widest AppImage compatibility
     runs-on: ${{ matrix.os }}
     defaults:
