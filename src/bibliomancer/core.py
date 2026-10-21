@@ -161,6 +161,31 @@ SUPP_RE = re.compile(
 DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Za-z0-9]+")
 
 
+ALL_YEARS, NO_DATE = "All years", "No date"
+
+
+def paper_year(row: dict) -> str:
+    """Year for the Browse filter: the PDF's own creationDate (meta_year), never the model's.
+
+    '' when the PDF carries no usable date (and for files that were never catalogued).
+    """
+    y = str(row.get("meta_year") or "").strip()
+    return y if re.fullmatch(r"(?:19|20)\d{2}", y) else ""
+
+
+def year_choices(years) -> list[str]:
+    """Browse filter values: 'All years', newest year first, then 'No date' if any is missing."""
+    ys = list(years)
+    out = [ALL_YEARS] + sorted({y for y in ys if y}, reverse=True)
+    return out + [NO_DATE] if any(not y for y in ys) else out
+
+
+def year_matches(year: str, choice: str) -> bool:
+    if choice in ("", ALL_YEARS):
+        return True
+    return not year if choice == NO_DATE else year == choice
+
+
 def pdf_facts(filepath: str, text: str = "") -> dict:
     """
     Metadata recoverable from the PDF without asking a model. Never raises.

@@ -109,3 +109,17 @@ def test_every_cli_command_has_a_module_with_main():
     for cmd, (mod, _prefix) in cli.MODULES.items():
         m = importlib.import_module(f"bibliomancer.{mod}")
         assert callable(getattr(m, "main", None)), cmd
+
+
+def test_paper_year_comes_from_pdf_metadata_not_the_model():
+    assert kb.paper_year({"year": "2015", "meta_year": "2017"}) == "2017"
+    assert kb.paper_year({"year": "2015", "meta_year": None}) == ""     # model year is ignored
+    assert kb.paper_year({"meta_year": "D:2017"}) == "" and kb.paper_year({}) == ""
+
+
+def test_year_filter_choices_and_matching():
+    assert kb.year_choices(["2019", "", "2021", "2019"]) == [kb.ALL_YEARS, "2021", "2019", kb.NO_DATE]
+    assert kb.year_choices(["2020"]) == [kb.ALL_YEARS, "2020"]
+    assert kb.year_matches("2019", kb.ALL_YEARS) and kb.year_matches("", kb.ALL_YEARS)
+    assert kb.year_matches("2019", "2019") and not kb.year_matches("2020", "2019")
+    assert kb.year_matches("", kb.NO_DATE) and not kb.year_matches("2019", kb.NO_DATE)

@@ -173,6 +173,7 @@ class App(DashboardApp):
         self.query = tk.StringVar()
         self.semantic = tk.BooleanVar(value=True)
         self.field_f = tk.StringVar(value="All fields")
+        self.year_f = tk.StringVar(value="All years")
         self.only_fail = tk.BooleanVar(value=False)
         self.fquery = tk.StringVar()
         self.flevel = tk.StringVar(value="Paper folder")
@@ -295,6 +296,9 @@ class App(DashboardApp):
         self.field_box = self.combo(bar, self.field_f, ["All fields"], width=24)
         self.field_box.pack(side="left", padx=(self.S(8), 0), ipady=self.S(3))
         self.field_box.bind("<<ComboboxSelected>>", lambda e: self.apply_filter())
+        self.year_box = self.combo(bar, self.year_f, ["All years"], width=10)   # PDF creation date
+        self.year_box.pack(side="left", padx=(self.S(8), 0), ipady=self.S(3))
+        self.year_box.bind("<<ComboboxSelected>>", lambda e: self.apply_filter())
         self.button(bar, "Search", self.apply_filter, "primary").pack(side="left", padx=(self.S(8), 0))
         opts = tk.Frame(lst, bg=T.SURFACE)
         opts.pack(fill="x", pady=(self.S(10), self.S(10)))
@@ -341,13 +345,14 @@ class App(DashboardApp):
                 for r in cat:
                     r["_failed"] = False
                     r["_fields"] = _json(r["research_fields"])
+                    r["_year"] = self.kb.paper_year(r)
                     r["_text"] = " ".join([r["title"] or "", r["authors"] or "", r["keywords"] or "",
                                            r["research_fields"] or "", r["core_takeaway"] or "",
                                            r["rel_path"] or ""]).lower()
                 done = {r["file_hash"] for r in cat}
                 failed = [{"file_hash": f["file_hash"], "rel_path": f["rel_path"],
                            "title": os.path.basename(f["rel_path"] or ""), "year": "",
-                           "_failed": True, "_fields": [], "_text": (f["rel_path"] or "").lower(),
+                           "_failed": True, "_fields": [], "_year": "", "_text": (f["rel_path"] or "").lower(),
                            "reason": f["reason"], "attempts": f["attempts"]}
                           for f in fails if f["file_hash"] not in done]
                 rows = cat + failed
@@ -366,6 +371,10 @@ class App(DashboardApp):
         self.rows, self.sidx = rows, idx
         fields = Counter(f for r in rows for f in r["_fields"])
         self.field_box["values"] = ["All fields"] + [f for f, _n in fields.most_common(60)]
+        years = self.kb.year_choices(r["_year"] for r in rows)
+        self.year_box["values"] = years
+        if self.year_f.get() not in years:
+            self.year_f.set("All years")
         if err:
             self.browse_note.config(text=err, fg=T.AMBER)
         self.apply_filter()
@@ -391,6 +400,7 @@ class App(DashboardApp):
         if q == self.spec.placeholder:
             q = ""
         fld = self.field_f.get()
+        yr = self.year_f.get()
         sem, why = self._semantic(q) if q and self.semantic.get() else (None, "exact words")
         scores, hits = sem if sem else ({}, set())
         words = re.findall(r"\w+", q.lower())
@@ -399,6 +409,8 @@ class App(DashboardApp):
             if self.only_fail.get() and not r["_failed"]:
                 continue
             if fld != "All fields" and fld not in r["_fields"]:
+                continue
+            if not self.kb.year_matches(r["_year"], yr):
                 continue
             if q and sem is not None and r["file_hash"] not in hits:
                 continue
