@@ -161,3 +161,19 @@ def test_ensure_embedding_starts_server_and_loads_model(tmp_path, monkeypatch):
     calls.clear()
     assert lm.ensure_embedding(str(lms), "http://x", model) == (True, "")   # ready: nothing to do
     assert calls == []
+
+
+def test_run_lms_drops_spinner_frames(monkeypatch):
+    """lms prints Braille spinner frames; they must never reach the log (a frozen
+    app's cp1252 console once crashed on one)."""
+    lm = importlib.import_module(f"{PKG}._shared.lmstudio")
+
+    class P:
+        returncode = 0
+        stdout = "Loading qwen/qwen3.5-9b 100% \u2827\n(7.71 GiB)\n"
+        stderr = ""
+    monkeypatch.setattr(lm, "run_quiet", lambda argv, timeout=None, console=False: P())
+    lines = []
+    assert lm.run_lms("lms", ["load", "m"], "load m", out=lines.append) == 0
+    assert lines == ["=== load m ===", "  Loading qwen/qwen3.5-9b 100%", "  (7.71 GiB)"]
+    "".join(lines).encode("cp1252")                  # printable on any Windows console

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from typing import Callable
 
@@ -101,7 +102,9 @@ def run_lms(lms: str, args: list[str], label: str, out: Callable[[str], None] = 
     """Run `lms <args>` as a pipeline step: '=== label ===' + the last lines."""
     out(f"=== {label} ===")
     p = run_quiet([lms, *args])
-    tail = [ln for ln in (p.stdout + p.stderr).splitlines() if ln.strip() and "\x1b" not in ln]
+    # progress spinners (Braille frames) and terminal escapes are noise in a log
+    text = re.sub(r"[\u2800-\u28ff]", "", p.stdout + p.stderr)
+    tail = [ln for ln in text.splitlines() if ln.strip() and "\x1b" not in ln]
     for ln in tail[-3:]:
         out(f"  {ln.strip()}")
     return p.returncode
